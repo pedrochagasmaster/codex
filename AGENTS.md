@@ -305,3 +305,50 @@ closest `pyproject.toml`'s `requires-python` field to see what minimum runtime v
 ## Platform Support
 
 Tests and features must support Linux, macOS and Windows unless feature is explicitly OS-specific.
+
+## Cursor Cloud specific instructions
+
+The product is the Rust `codex` CLI in `codex-rs/` (a large Cargo workspace). The npm wrapper
+(`codex-cli/`) and SDKs (`sdk/typescript`, `sdk/python`) are thin clients that drive the same
+binary; they are optional for most work. Standard build/lint/test/run commands live in
+`docs/install.md`, the root `justfile`, and the AGENTS.md sections above — use those, not duplicated
+copies here.
+
+Environment notes (the startup update script already runs `cargo fetch` in `codex-rs` and
+`pnpm install`; do not re-run dependency installs unless something is missing):
+
+- Toolchain: `codex-rs/rust-toolchain.toml` pins Rust `1.95.0`; `rustup` auto-installs/selects it when
+  you run cargo inside `codex-rs/`. Workspace helper tools (`just`, `cargo-nextest`, `cargo-insta`)
+  are preinstalled in `/usr/local/cargo/bin`.
+- System libraries required to build (already present in this environment): `libssl-dev` (for
+  `openssl-sys`), `libcap-dev`, `clang`, `build-essential`, `pkg-config`. A missing `libssl-dev` is
+  the usual cause of an `openssl-sys` "Could not find directory of OpenSSL installation" build error.
+- `bubblewrap` is not installed; Codex prints a warning and falls back to its bundled sandbox, which
+  is fine for local runs.
+- The Python SDK uses `uv` (installed at `~/.local/bin/uv`); run `uv sync` in `sdk/python` before
+  `uv run pytest`.
+
+Running the agent end-to-end without OpenAI credentials: no `OPENAI_API_KEY`/ChatGPT auth is present
+in this environment, so point Codex at a local mock of the Responses API instead. The wire format is
+documented by `codex-rs/core/tests/common/responses.rs` (events `response.created`,
+`response.output_item.done` with an assistant `message`, then `response.completed`). Configure a
+custom provider via `-c` overrides and run non-interactively, e.g.:
+
+```bash
+cd codex-rs
+export MOCK_API_KEY=dummy-key
+./target/debug/codex exec \
+  -c model_provider=mock \
+  -c 'model_providers.mock.name=mock' \
+  -c 'model_providers.mock.base_url=http://127.0.0.1:11434/v1' \
+  -c 'model_providers.mock.wire_api=responses' \
+  -c 'model_providers.mock.env_key=MOCK_API_KEY' \
+  -c 'model=gpt-5' \
+  --skip-git-repo-check \
+  "your prompt" < /dev/null
+```
+
+- `codex exec` reads extra prompt text from stdin and will hang waiting for EOF if stdin is a TTY;
+  always redirect `< /dev/null` (or pipe input) in non-interactive runs.
+- The default `target/debug/codex` build is large (~1.3 GB); expect long first builds. Use
+  `cargo build --bin codex` to build just the CLI.
