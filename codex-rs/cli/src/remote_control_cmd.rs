@@ -341,6 +341,7 @@ fn print_remote_control_start_output(
     Ok(())
 }
 
+#[cfg_attr(windows, allow(dead_code))]
 fn print_foreground_ready_output(
     summary: &AppServerRemoteControlReadyStatus,
     json: bool,
@@ -376,11 +377,13 @@ struct RemoteControlStartJsonOutput<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 enum RemoteControlModeJson {
+    #[cfg_attr(windows, allow(dead_code))]
     Foreground,
     Daemon,
 }
 
 impl<'a> RemoteControlStartJsonOutput<'a> {
+    #[cfg_attr(windows, allow(dead_code))]
     fn foreground(summary: &'a AppServerRemoteControlReadyStatus) -> Self {
         Self {
             mode: RemoteControlModeJson::Foreground,
@@ -445,6 +448,7 @@ fn ensure_remote_control_startable(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RemoteControlHumanOutputMode {
+    #[cfg_attr(windows, allow(dead_code))]
     Foreground,
     Daemon,
 }
