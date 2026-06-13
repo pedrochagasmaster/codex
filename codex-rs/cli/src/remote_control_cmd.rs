@@ -1,4 +1,5 @@
 use std::io::Write;
+#[cfg(not(windows))]
 use std::time::Duration;
 
 use anyhow::Context;
@@ -16,15 +17,22 @@ use codex_app_server_protocol::RemoteControlConnectionStatus;
 use codex_arg0::Arg0DispatchPaths;
 use codex_config::LoaderOverrides;
 use codex_protocol::protocol::SessionSource;
+#[cfg(not(windows))]
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_cli::CliConfigOverrides;
 use serde::Serialize;
+#[cfg(not(windows))]
 use tokio::sync::watch;
+#[cfg(not(windows))]
 use tokio::task::JoinHandle;
+#[cfg(not(windows))]
 use tokio::time::timeout;
 
+#[cfg(not(windows))]
 const FOREGROUND_SOCKET_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(not(windows))]
 const FOREGROUND_SOCKET_CONNECT_RETRY_DELAY: Duration = Duration::from_millis(50);
+#[cfg(not(windows))]
 const FOREGROUND_APP_SERVER_ABORT_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[derive(Debug, Args)]
@@ -98,6 +106,39 @@ fn print_remote_control_progress(json: bool, message: &str) -> anyhow::Result<()
     Ok(())
 }
 
+#[cfg(windows)]
+async fn run_foreground_remote_control(
+    json: bool,
+    arg0_paths: Arg0DispatchPaths,
+    root_config_overrides: CliConfigOverrides,
+) -> anyhow::Result<()> {
+    let runtime_options = AppServerRuntimeOptions {
+        remote_control_startup_mode: codex_app_server::RemoteControlStartupMode::EnabledEphemeral,
+        install_shutdown_signal_handler: true,
+        ..Default::default()
+    };
+
+    if !json {
+        println!("Remote control is running in Windows foreground compatibility mode.");
+        println!("Press Ctrl-C to stop.");
+    }
+
+    codex_app_server::run_main_with_transport_options(
+        arg0_paths,
+        root_config_overrides,
+        LoaderOverrides::default(),
+        /*strict_config*/ false,
+        /*default_analytics_enabled*/ false,
+        AppServerTransport::Off,
+        SessionSource::Cli,
+        AppServerWebsocketAuthSettings::default(),
+        runtime_options,
+    )
+    .await
+    .context("foreground app-server exited with an error")
+}
+
+#[cfg(not(windows))]
 async fn run_foreground_remote_control(
     json: bool,
     arg0_paths: Arg0DispatchPaths,
@@ -173,6 +214,7 @@ async fn run_foreground_remote_control(
     result
 }
 
+#[cfg(not(windows))]
 fn foreground_stop_signal() -> (watch::Receiver<bool>, JoinHandle<()>) {
     let (stop_tx, stop_rx) = watch::channel(false);
     let task = tokio::spawn(async move {
@@ -184,6 +226,7 @@ fn foreground_stop_signal() -> (watch::Receiver<bool>, JoinHandle<()>) {
     (stop_rx, task)
 }
 
+#[cfg(not(windows))]
 enum ForegroundStartupResult {
     Ready(AppServerRemoteControlReadyStatus),
     Stopped,
@@ -191,6 +234,7 @@ enum ForegroundStartupResult {
     AppServerExited(anyhow::Error),
 }
 
+#[cfg(not(windows))]
 async fn wait_for_foreground_remote_control_start(
     app_server_task: &mut JoinHandle<std::io::Result<()>>,
     ready: impl std::future::Future<Output = anyhow::Result<AppServerRemoteControlReadyStatus>>,
@@ -212,6 +256,7 @@ async fn wait_for_foreground_remote_control_start(
     }
 }
 
+#[cfg(not(windows))]
 async fn wait_for_foreground_app_server(
     mut app_server_task: JoinHandle<std::io::Result<()>>,
     mut stop_rx: watch::Receiver<bool>,
@@ -230,6 +275,7 @@ async fn wait_for_foreground_app_server(
     Ok(())
 }
 
+#[cfg(not(windows))]
 async fn wait_for_stop_signal(stop_rx: &mut watch::Receiver<bool>) {
     if *stop_rx.borrow() {
         return;
@@ -237,6 +283,7 @@ async fn wait_for_stop_signal(stop_rx: &mut watch::Receiver<bool>) {
     let _ = stop_rx.wait_for(|stopped| *stopped).await;
 }
 
+#[cfg(not(windows))]
 fn foreground_app_server_exited_before_ready(
     result: Result<std::io::Result<()>, tokio::task::JoinError>,
 ) -> anyhow::Error {
@@ -251,11 +298,13 @@ fn foreground_app_server_exited_before_ready(
     }
 }
 
+#[cfg(not(windows))]
 async fn abort_foreground_app_server(app_server_task: JoinHandle<std::io::Result<()>>) {
     app_server_task.abort();
     let _ = timeout(FOREGROUND_APP_SERVER_ABORT_TIMEOUT, app_server_task).await;
 }
 
+#[cfg(not(windows))]
 async fn wait_for_foreground_remote_control_ready(
     socket_path: AbsolutePathBuf,
 ) -> anyhow::Result<AppServerRemoteControlReadyStatus> {
@@ -629,6 +678,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(windows))]
     #[tokio::test]
     async fn foreground_wait_aborts_app_server_on_stop_signal() {
         let app_server_task = tokio::spawn(std::future::pending::<std::io::Result<()>>());
@@ -644,6 +694,7 @@ mod tests {
         .expect("stop signal should shut down cleanly");
     }
 
+    #[cfg(not(windows))]
     #[tokio::test]
     async fn foreground_start_wait_stops_before_ready() {
         let mut app_server_task = tokio::spawn(std::future::pending::<std::io::Result<()>>());
@@ -666,6 +717,7 @@ mod tests {
         let _ = app_server_task.await;
     }
 
+    #[cfg(not(windows))]
     #[tokio::test]
     async fn foreground_start_wait_reports_app_server_exit_before_ready() {
         let mut app_server_task =
