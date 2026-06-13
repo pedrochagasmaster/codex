@@ -352,3 +352,23 @@ export MOCK_API_KEY=dummy-key
   always redirect `< /dev/null` (or pipe input) in non-interactive runs.
 - The default `target/debug/codex` build is large (~1.3 GB); expect long first builds. Use
   `cargo build --bin codex` to build just the CLI.
+
+### Windows cross-compilation (baked into the VM snapshot)
+
+This environment can cross-compile the `codex-cli` crate (and the Windows-only
+`codex-windows-sandbox` dependency) for Windows from Linux. The toolchain below is preinstalled and
+persists in the VM snapshot, so it is intentionally NOT part of the startup update script:
+
+- rustup targets `x86_64-pc-windows-msvc` and `x86_64-pc-windows-gnu` are installed for the pinned
+  `1.95.0` toolchain (add targets from inside `codex-rs/` so the right toolchain is selected).
+- `cargo-xwin` (in `/usr/local/cargo/bin`) drives MSVC-target builds; on first use it downloads the
+  Windows CRT/SDK into its cache automatically (needs network).
+- MSVC linking uses LLVM 20 (`llvm-20`/`llvm-20-tools`). `cargo-xwin` expects `llvm-lib` on `PATH`,
+  satisfied by the symlink `/usr/local/bin/llvm-lib -> /usr/bin/llvm-lib-20`.
+- `gcc-mingw-w64-x86-64` provides `x86_64-w64-mingw32-gcc` for the `*-windows-gnu` target.
+
+Verify (MSVC target) from `codex-rs/`:
+
+```bash
+cargo xwin check -p codex-cli --target x86_64-pc-windows-msvc
+```
